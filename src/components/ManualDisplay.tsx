@@ -1,14 +1,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Download, Package, Wrench, ListOrdered, FileImage } from "lucide-react";
+import { Download, Package, Wrench, ListOrdered, FileImage, Loader2 } from "lucide-react";
 import { ManualData, ProjectData } from "@/pages/Index";
 import { generatePDF, downloadBlob } from "@/lib/doc-generator.ts";
 import { Badge } from "@/components/ui/badge";
 import { SVGPreview } from "@/components/SVGPreview";
 import { generateAllSVGs, downloadAllSVGsAsZip } from "@/lib/svg-utils";
 import { Component } from "@/lib/types";
-import { useMemo } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 
 interface ManualDisplayProps {
   data: ManualData;
@@ -16,6 +16,19 @@ interface ManualDisplayProps {
 }
 
 export const ManualDisplay = ({ data, projectData }: ManualDisplayProps) => {
+  const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+  const manualRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to manual when it's generated
+  useEffect(() => {
+    if (manualRef.current) {
+      manualRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }
+  }, []);
+
   // Convert ManualData components to Component type for SVG generation
   const components: Component[] = useMemo(() => {
     return data.components.map((c) => ({
@@ -44,54 +57,68 @@ export const ManualDisplay = ({ data, projectData }: ManualDisplayProps) => {
   const svgFiles = useMemo(() => generateAllSVGs(components), [components]);
 
   const handleDownloadPDF = async () => {
-    if (!data || !projectData) return;
+    if (!data || !projectData || isDownloadingPDF) return;
 
-    // Adaptar ManualData y ProjectData a ProductionManual
-    const productionManual = {
-      proyecto: {
-        // No hay nombre explícito, usamos specifications como nombre del proyecto
-        nombre: (projectData.specifications || "Proyecto sin nombre"),
-        descripcion: projectData.specifications || "Sin descripción",
-        dimensionesGenerales: {
-          frente: projectData.dimensions.frente,
-          fondo: projectData.dimensions.fondo,
-          altura: projectData.dimensions.altura,
+    setIsDownloadingPDF(true);
+    try {
+      // Adaptar ManualData y ProjectData a ProductionManual
+      const productionManual = {
+        proyecto: {
+          // No hay nombre explícito, usamos specifications como nombre del proyecto
+          nombre: (projectData.specifications || "Proyecto sin nombre"),
+          descripcion: projectData.specifications || "Sin descripción",
+          dimensionesGenerales: {
+            frente: projectData.dimensions.frente,
+            fondo: projectData.dimensions.fondo,
+            altura: projectData.dimensions.altura,
+          },
         },
-      },
-      fechaGeneracion: new Date().toLocaleDateString(),
-      componentes: data.components.map((c, i) => ({
-        id: c.id,
-        nombre: c.name,
-        descripcion: c.notes || "",
-        dimensiones: {
-          largo: parseFloat(c.dimensions?.split("x")[0]?.trim() || "10"),
-          ancho: parseFloat(c.dimensions?.split("x")[1]?.trim() || "2"),
-          alto: parseFloat(c.dimensions?.split("x")[2]?.trim() || "10"),
-          unidad: "cm",
-        },
-        material: {
-          tipo: c.material,
-          especificaciones: c.notes || "",
-          cantidad: typeof c.quantity === 'number' ? c.quantity : parseInt(c.quantity) || 1,
-          unidadCantidad: "pz",
-        },
-        proceso: [],
-        notas: c.notes || "",
-      })),
-      consumibles: data.consumables.map((c, i) => ({
-        id: c.id,
-        nombre: c.name,
-        cantidad: c.quantity,
-        unidad: c.unit,
-        // Consumibles no tienen especificaciones, dejamos vacío
-        especificaciones: "",
-        tipo: "consumible",
-      })),
-    };
+        fechaGeneracion: new Date().toLocaleDateString(),
+        componentes: data.components.map((c, i) => ({
+          id: c.id,
+          nombre: c.name,
+          descripcion: c.notes || "",
+          dimensiones: {
+            largo: parseFloat(c.dimensions?.split("x")[0]?.trim() || "10"),
+            ancho: parseFloat(c.dimensions?.split("x")[1]?.trim() || "2"),
+            alto: parseFloat(c.dimensions?.split("x")[2]?.trim() || "10"),
+            unidad: "cm",
+          },
+          material: {
+            tipo: c.material,
+            especificaciones: c.notes || "",
+            cantidad: typeof c.quantity === 'number' ? c.quantity : parseInt(c.quantity) || 1,
+            unidadCantidad: "pz",
+          },
+          proceso: [],
+          notas: c.notes || "",
+        })),
+        consumibles: data.consumables.map((c, i) => ({
+          id: c.id,
+          nombre: c.name,
+          cantidad: c.quantity,
+          unidad: c.unit,
+          // Consumibles no tienen especificaciones, dejamos vacío
+          especificaciones: "",
+          tipo: "consumible",
+        })),
+      };
 
-    // Generar y descargar el PDF con SVGs incluidos
-    const pdfBlob = await generatePDF(productionManual, svgFiles);
-    downloadBlob(pdfBlob, `${productionManual.proyecto.nombre || "manual"}.pdf`);
+      // Generar nombre profesional para el archivo
+      const today = new Date();
+      const dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+      const projectName = (projectData.specifications || "proyecto")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-') // Reemplazar caracteres especiales con guiones
+        .replace(/^-+|-+$/g, ''); // Remover guiones al inicio y final
+      const filename = `manual-produccion_${projectName}_${dateStr}.pdf`;
+
+      // Generar y descargar el PDF con SVGs incluidos
+      const pdfBlob = await generatePDF(productionManual, svgFiles);
+      downloadBlob(pdfBlob, filename);
+    } finally {
+      setIsDownloadingPDF(false);
+    }
   };
 
   const handleDownloadAllSVGs = async () => {
@@ -101,7 +128,7 @@ export const ManualDisplay = ({ data, projectData }: ManualDisplayProps) => {
   };
 
   return (
-    <div className="space-y-6">
+    <div ref={manualRef} className="space-y-6">
       {/* Header */}
       <Card className="shadow-lg border-border/50 bg-gradient-to-br from-card to-card/95">
         <CardHeader>
@@ -121,9 +148,22 @@ export const ManualDisplay = ({ data, projectData }: ManualDisplayProps) => {
                 <FileImage className="w-4 h-4 mr-2" />
                 Descargar SVGs
               </Button>
-              <Button onClick={handleDownloadPDF} className="shadow-accent">
-                <Download className="w-4 h-4 mr-2" />
-                Descargar Manual PDF
+              <Button
+                onClick={handleDownloadPDF}
+                className="shadow-accent"
+                disabled={isDownloadingPDF}
+              >
+                {isDownloadingPDF ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Generando PDF...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Descargar Manual PDF
+                  </>
+                )}
               </Button>
             </div>
           </div>
