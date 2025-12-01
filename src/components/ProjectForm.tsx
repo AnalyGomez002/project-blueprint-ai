@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Upload, Ruler, FileText, Sparkles } from "lucide-react";
+import { Upload, Ruler, FileText, Sparkles, X } from "lucide-react";
 import { ProjectData } from "@/pages/Index";
 import { useToast } from "@/hooks/use-toast";
 
@@ -15,8 +15,8 @@ interface ProjectFormProps {
 
 export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
   const { toast } = useToast();
-  const [renderFile, setRenderFile] = useState<File | null>(null);
-  const [renderPreview, setRenderPreview] = useState<string>("");
+  const [renderFiles, setRenderFiles] = useState<File[]>([]);
+  const [renderPreviews, setRenderPreviews] = useState<string[]>([]);
   const [dimensions, setDimensions] = useState({
     frente: "",
     fondo: "",
@@ -25,24 +25,32 @@ export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
   const [specifications, setSpecifications] = useState("");
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setRenderFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setRenderPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      setRenderFiles(prev => [...prev, ...files]);
+
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setRenderPreviews(prev => [...prev, reader.result as string]);
+        };
+        reader.readAsDataURL(file);
+      });
     }
+  };
+
+  const removeFile = (index: number) => {
+    setRenderFiles(prev => prev.filter((_, i) => i !== index));
+    setRenderPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!renderFile) {
+
+    if (renderFiles.length === 0) {
       toast({
         title: "Error",
-        description: "Por favor, sube un archivo de render",
+        description: "Por favor, sube al menos un archivo de render",
         variant: "destructive"
       });
       return;
@@ -67,7 +75,7 @@ export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
     }
 
     onSubmit({
-      renderFile,
+      renderFiles,
       dimensions: {
         frente: parseFloat(dimensions.frente),
         fondo: parseFloat(dimensions.fondo),
@@ -99,23 +107,37 @@ export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
           <div className="space-y-2">
             <Label htmlFor="render" className="flex items-center gap-2 text-base font-medium">
               <Upload className="w-4 h-4 text-primary" />
-              Render del Diseño
+              Renders del Diseño (puedes seleccionar varios)
             </Label>
             <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
               <Input
                 id="render"
                 type="file"
                 accept="image/*,.pdf"
+                multiple
                 onChange={handleFileChange}
                 className="cursor-pointer"
+                disabled={isGenerating}
               />
-              {renderPreview && (
-                <div className="mt-4">
-                  <img
-                    src={renderPreview}
-                    alt="Preview"
-                    className="max-h-64 rounded-lg mx-auto shadow-md"
-                  />
+              {renderPreviews.length > 0 && (
+                <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {renderPreviews.map((preview, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={preview}
+                        alt={`Preview ${index + 1}`}
+                        className="w-full h-32 object-cover rounded-lg shadow-md"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeFile(index)}
+                        className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                        disabled={isGenerating}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -137,6 +159,7 @@ export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
                   placeholder="200"
                   value={dimensions.frente}
                   onChange={(e) => setDimensions({ ...dimensions, frente: e.target.value })}
+                  disabled={isGenerating}
                 />
               </div>
               <div className="space-y-2">
@@ -148,6 +171,7 @@ export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
                   placeholder="100"
                   value={dimensions.fondo}
                   onChange={(e) => setDimensions({ ...dimensions, fondo: e.target.value })}
+                  disabled={isGenerating}
                 />
               </div>
               <div className="space-y-2">
@@ -159,6 +183,7 @@ export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
                   placeholder="250"
                   value={dimensions.altura}
                   onChange={(e) => setDimensions({ ...dimensions, altura: e.target.value })}
+                  disabled={isGenerating}
                 />
               </div>
             </div>
@@ -176,6 +201,7 @@ export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
               onChange={(e) => setSpecifications(e.target.value)}
               rows={6}
               className="resize-none"
+              disabled={isGenerating}
             />
           </div>
 

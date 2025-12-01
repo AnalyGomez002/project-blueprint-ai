@@ -5,9 +5,10 @@ import { ManualDisplay } from "@/components/ManualDisplay";
 import { MaterialsDatabase } from "@/components/MaterialsDatabase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { AnalyzingSummary } from "@/components/AnalyzingSummary";
 
 export interface ProjectData {
-  renderFile: File | null;
+  renderFiles: File[];
   dimensions: {
     frente: number;
     fondo: number;
@@ -43,45 +44,60 @@ const Index = () => {
   const handleGenerateManual = async (data: ProjectData) => {
     setProjectData(data);
     setIsGenerating(true);
-    
+
     try {
       // ==========================================
       // PASO 1: CONVERTIR IMAGEN A BASE64
       // ==========================================
-      // Detectar el MIME type del archivo
-      const fileExtension = data.renderFile!.name.split('.').pop()?.toLowerCase();
-      let mimeType = "image/png";
-      
-      if (fileExtension === "jpg" || fileExtension === "jpeg") {
-        mimeType = "image/jpeg";
-      } else if (fileExtension === "png") {
-        mimeType = "image/png";
-      } else if (fileExtension === "webp") {
-        mimeType = "image/webp";
-      } else if (fileExtension === "pdf") {
-        mimeType = "application/pdf";
-      }
+      // ==========================================
+      // PASO 1: CONVERTIR IMÁGENES A BASE64
+      // ==========================================
 
-      // Convertir el archivo a base64
-      const base64Image = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64 = reader.result as string;
-          // Remover el prefijo "data:image/xxx;base64," para obtener solo el base64
-          const base64Data = base64.split(',')[1];
-          resolve(base64Data);
+      const imageParts = await Promise.all(data.renderFiles.map(async (file) => {
+        // Detectar el MIME type del archivo
+        const fileExtension = file.name.split('.').pop()?.toLowerCase();
+        let mimeType = "image/png";
+
+        if (fileExtension === "jpg" || fileExtension === "jpeg") {
+          mimeType = "image/jpeg";
+        } else if (fileExtension === "png") {
+          mimeType = "image/png";
+        } else if (fileExtension === "webp") {
+          mimeType = "image/webp";
+        } else if (fileExtension === "pdf") {
+          mimeType = "application/pdf";
+        }
+
+        // Convertir el archivo a base64
+        const base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = reader.result as string;
+            // Remover el prefijo "data:image/xxx;base64," para obtener solo el base64
+            const base64Data = base64.split(',')[1];
+            resolve(base64Data);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        return {
+          inlineData: {
+            data: base64Data,
+            mimeType: mimeType,
+          },
         };
-        reader.onerror = reject;
-        reader.readAsDataURL(data.renderFile!);
-      });
+      }));
 
-      console.log('[ANALYZE] Archivo convertido a base64, MIME:', mimeType);
+      console.log(`[ANALYZE] ${imageParts.length} archivos convertidos a base64`);
+
+      console.log(`[ANALYZE] ${imageParts.length} archivos convertidos a base64`);
 
       // ==========================================
       // PASO 2: PREPARAR PROMPT PARA GEMINI
       // ==========================================
       const dimsText = `Frente: ${data.dimensions.frente} cm, Fondo: ${data.dimensions.fondo} cm, Altura: ${data.dimensions.altura} cm`;
-      
+
       const geminiPrompt = `
         Analiza este render arquitectónico/de mueble y devuelve un JSON con componentes fabricables.
         
@@ -110,7 +126,7 @@ const Index = () => {
       // PASO 3: LLAMAR A LA API DE GEMINI A TRAVÉS DEL EDGE FUNCTION
       // ==========================================
       console.log('[ANALYZE] Llamando a Gemini API...');
-      
+
       // Llamada directa a la API de Gemini
       const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!geminiApiKey) {
@@ -127,12 +143,7 @@ const Index = () => {
           contents: [
             {
               parts: [
-                {
-                  inlineData: {
-                    data: base64Image,
-                    mimeType: mimeType,
-                  },
-                },
+                ...imageParts,
                 {
                   text: geminiPrompt,
                 },
@@ -155,7 +166,7 @@ const Index = () => {
       const jsonMatch = responseText.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
       const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
       console.log('[GEMINI] Parsed successfully:', Array.isArray(parsed) ? parsed.length : 'object');
-      
+
       if (!parsed || parsed.length === 0) {
         throw new Error('No se recibieron componentes de la IA');
       }
@@ -275,11 +286,11 @@ const Index = () => {
       });
 
       console.log('[ANALYZE] Manual generado exitosamente');
-      
+
     } catch (error) {
       console.error('[ANALYZE ERROR]', error);
       setManualData(null);
-      
+
       toast({
         title: "Error al generar el manual",
         description: error instanceof Error ? error.message : "Ocurrió un error inesperado. Por favor intenta de nuevo.",
@@ -293,32 +304,40 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/30">
       <Header />
-      
+
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="generator" className="w-full">
           <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-8">
             <TabsTrigger value="generator">Generador</TabsTrigger>
             <TabsTrigger value="materials">Base de Materiales</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="generator" className="space-y-8">
             <div className="max-w-4xl mx-auto">
-              <ProjectForm 
+              <ProjectForm
                 onSubmit={handleGenerateManual}
                 isGenerating={isGenerating}
               />
             </div>
-            
+
+            {/* Show summary while analyzing */}
+            {isGenerating && !manualData && projectData && (
+              <div className="max-w-4xl mx-auto animate-fade-in">
+                <AnalyzingSummary projectData={projectData} />
+              </div>
+            )}
+
+            {/* Show generated manual */}
             {manualData && (
               <div className="max-w-6xl mx-auto animate-fade-in">
-                <ManualDisplay 
+                <ManualDisplay
                   data={manualData}
                   projectData={projectData}
                 />
               </div>
             )}
           </TabsContent>
-          
+
           <TabsContent value="materials">
             <MaterialsDatabase />
           </TabsContent>

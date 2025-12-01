@@ -104,14 +104,13 @@ export const ManualDisplay = ({ data, projectData }: ManualDisplayProps) => {
         })),
       };
 
-      // Generar nombre profesional para el archivo
-      const today = new Date();
-      const dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+      // Generar nombre corto para el archivo
       const projectName = (projectData.specifications || "proyecto")
         .toLowerCase()
+        .slice(0, 20) // Limitar longitud
         .replace(/[^a-z0-9]+/g, '-') // Reemplazar caracteres especiales con guiones
         .replace(/^-+|-+$/g, ''); // Remover guiones al inicio y final
-      const filename = `manual-produccion_${projectName}_${dateStr}.pdf`;
+      const filename = `manual_${projectName}.pdf`;
 
       // Generar y descargar el PDF con SVGs incluidos
       const pdfBlob = await generatePDF(productionManual, svgFiles);
