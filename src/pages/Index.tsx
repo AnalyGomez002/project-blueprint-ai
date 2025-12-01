@@ -4,6 +4,7 @@ import { ProjectForm } from "@/components/ProjectForm";
 import { ManualDisplay } from "@/components/ManualDisplay";
 import { MaterialsDatabase } from "@/components/MaterialsDatabase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
 
 export interface ProjectData {
   renderFile: File | null;
@@ -34,6 +35,7 @@ export interface ManualData {
 }
 
 const Index = () => {
+  const { toast } = useToast();
   const [projectData, setProjectData] = useState<ProjectData | null>(null);
   const [manualData, setManualData] = useState<ManualData | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -105,82 +107,43 @@ const Index = () => {
       `;
 
       // ==========================================
-      // PASO 3: LLAMAR A LA API DE GEMINI
-      // ==========================================
-      // AQUÍ IRÍA LA LLAMADA A TU API DE GEMINI
-      // const response = await fetch('TU_ENDPOINT_DE_GEMINI', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //     'Authorization': `Bearer TU_API_KEY`
-      //   },
-      //   body: JSON.stringify({
-      //     image: base64Image,
-      //     mimeType: mimeType,
-      //     prompt: geminiPrompt
-      //   })
-      // });
-      // 
-      // const geminiResponse = await response.json();
-      // const componentsFromAI = geminiResponse.components || [];
-
-      // ==========================================
-      // SIMULACIÓN DE RESPUESTA (REMOVER CUANDO TENGAS LA API)
+      // PASO 3: LLAMAR A LA API DE GEMINI A TRAVÉS DEL EDGE FUNCTION
       // ==========================================
       console.log('[ANALYZE] Llamando a Gemini API...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Esta es una respuesta simulada basada en tu estructura
-      const componentsFromAI = [
-        {
-          name: "Panel Frontal Principal",
-          type: "panel",
-          approx_pct_width: 80,
-          approx_pct_height: 90,
-          depth_cm: 1.8,
-          color: "blanco",
-          suggested_material: "MDF",
-          quantity: 1,
-          brand: "",
-          notes: "Acabado con vinilo mate"
+      // Obtener la URL base del proyecto de Supabase
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      
+      if (!supabaseUrl) {
+        throw new Error('VITE_SUPABASE_URL no está configurada');
+      }
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/analyze-render`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        {
-          name: "Logo Central",
-          type: "logo",
-          approx_pct_width: 30,
-          approx_pct_height: 15,
-          depth_cm: 0.3,
-          color: "dorado",
-          suggested_material: "Vinilo",
-          quantity: 1,
-          brand: "",
-          notes: "Vinilo de corte premium"
-        },
-        {
-          name: "Estructura Base",
-          type: "box",
-          approx_pct_width: 100,
-          approx_pct_height: 20,
-          depth_cm: 100,
-          color: "negro",
-          suggested_material: "PTR",
-          quantity: 1,
-          brand: "",
-          notes: "Soldadura en esquinas"
-        },
-        {
-          name: "Iluminación Superior",
-          type: "led",
-          approx_pct_width: 70,
-          approx_pct_height: 5,
-          depth_cm: 2,
-          color: "blanco cálido",
-          suggested_material: "LED",
-          quantity: 1,
-          brand: "Philips",
-          notes: "Tira LED adhesiva"
-        }
-      ];
+        body: JSON.stringify({
+          base64Image: base64Image,
+          mimeType: mimeType,
+          prompt: geminiPrompt
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[ANALYZE] Error response:', errorData);
+        throw new Error(errorData.error || 'Error al llamar a la API de Gemini');
+      }
+
+      const geminiResponse = await response.json();
+      console.log('[ANALYZE] Respuesta recibida:', geminiResponse);
+      
+      if (!geminiResponse.success || !geminiResponse.components) {
+        throw new Error('No se recibieron componentes de la IA');
+      }
+
+      const componentsFromAI = geminiResponse.components;
 
       // ==========================================
       // PASO 4: PROCESAR Y CALCULAR COMPONENTES
@@ -299,6 +262,12 @@ const Index = () => {
     } catch (error) {
       console.error('[ANALYZE ERROR]', error);
       setManualData(null);
+      
+      toast({
+        title: "Error al generar el manual",
+        description: error instanceof Error ? error.message : "Ocurrió un error inesperado. Por favor intenta de nuevo.",
+        variant: "destructive"
+      });
     } finally {
       setIsGenerating(false);
     }
