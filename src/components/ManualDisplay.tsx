@@ -1,13 +1,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Download, Package, Wrench, ListOrdered } from "lucide-react";
+import { Download, Package, Wrench, ListOrdered, FileImage } from "lucide-react";
 import { ManualData, ProjectData } from "@/pages/Index";
-// Importar el generador de PDF y utilidad de descarga
-// Update the import path below to the correct location of your doc-generator-ts file.
-// For example, if the file is in 'src/utils/doc-generator-ts.ts', use the following import:
 import { generatePDF, downloadBlob } from "@/lib/doc-generator.ts";
 import { Badge } from "@/components/ui/badge";
+import { SVGPreview } from "@/components/SVGPreview";
+import { generateAllSVGs, downloadAllSVGsAsZip } from "@/lib/svg-utils";
+import { Component } from "@/lib/types";
+import { useMemo } from "react";
 
 interface ManualDisplayProps {
   data: ManualData;
@@ -15,7 +16,34 @@ interface ManualDisplayProps {
 }
 
 export const ManualDisplay = ({ data, projectData }: ManualDisplayProps) => {
-  const handleDownload = async () => {
+  // Convert ManualData components to Component type for SVG generation
+  const components: Component[] = useMemo(() => {
+    return data.components.map((c) => ({
+      id: c.id,
+      nombre: c.name,
+      descripcion: c.notes || "",
+      dimensiones: {
+        largo: parseFloat(c.dimensions?.split("x")[0]?.trim() || "10"),
+        ancho: parseFloat(c.dimensions?.split("x")[1]?.trim() || "2"),
+        alto: parseFloat(c.dimensions?.split("x")[2]?.trim() || "10"),
+        unidad: "cm",
+        forma: "rectangulo", // Default, AI should provide this
+      },
+      material: {
+        tipo: c.material,
+        especificaciones: c.notes || "",
+        cantidad: typeof c.quantity === 'number' ? c.quantity : parseInt(c.quantity) || 1,
+        unidadCantidad: "pz",
+      },
+      proceso: [],
+      notas: c.notes || "",
+    }));
+  }, [data.components]);
+
+  // Generate all SVGs
+  const svgFiles = useMemo(() => generateAllSVGs(components), [components]);
+
+  const handleDownloadPDF = async () => {
     if (!data || !projectData) return;
 
     // Adaptar ManualData y ProjectData a ProductionManual
@@ -36,15 +64,15 @@ export const ManualDisplay = ({ data, projectData }: ManualDisplayProps) => {
         nombre: c.name,
         descripcion: c.notes || "",
         dimensiones: {
-          largo: c.dimensions?.split("x")[0]?.trim() || "",
-          ancho: c.dimensions?.split("x")[1]?.trim() || "",
-          alto: c.dimensions?.split("x")[2]?.trim() || "",
+          largo: parseFloat(c.dimensions?.split("x")[0]?.trim() || "10"),
+          ancho: parseFloat(c.dimensions?.split("x")[1]?.trim() || "2"),
+          alto: parseFloat(c.dimensions?.split("x")[2]?.trim() || "10"),
           unidad: "cm",
         },
         material: {
           tipo: c.material,
           especificaciones: c.notes || "",
-          cantidad: c.quantity,
+          cantidad: typeof c.quantity === 'number' ? c.quantity : parseInt(c.quantity) || 1,
           unidadCantidad: "pz",
         },
         proceso: [],
@@ -61,9 +89,15 @@ export const ManualDisplay = ({ data, projectData }: ManualDisplayProps) => {
       })),
     };
 
-    // Generar y descargar el PDF
-    const pdfBlob = await generatePDF(productionManual);
+    // Generar y descargar el PDF con SVGs incluidos
+    const pdfBlob = await generatePDF(productionManual, svgFiles);
     downloadBlob(pdfBlob, `${productionManual.proyecto.nombre || "manual"}.pdf`);
+  };
+
+  const handleDownloadAllSVGs = async () => {
+    if (!projectData) return;
+    const projectName = projectData.specifications || "proyecto";
+    await downloadAllSVGsAsZip(svgFiles, components, projectName);
   };
 
   return (
@@ -82,12 +116,43 @@ export const ManualDisplay = ({ data, projectData }: ManualDisplayProps) => {
                 )}
               </CardDescription>
             </div>
-            <Button onClick={handleDownload} className="shadow-accent">
-              <Download className="w-4 h-4 mr-2" />
-              Descargar Manual
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={handleDownloadAllSVGs} variant="outline" className="shadow-sm">
+                <FileImage className="w-4 h-4 mr-2" />
+                Descargar SVGs
+              </Button>
+              <Button onClick={handleDownloadPDF} className="shadow-accent">
+                <Download className="w-4 h-4 mr-2" />
+                Descargar Manual PDF
+              </Button>
+            </div>
           </div>
         </CardHeader>
+      </Card>
+
+      {/* SVG Cutting Files Preview Section */}
+      <Card className="shadow-md border-border/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileImage className="w-5 h-5 text-primary" />
+            Archivos de Corte (Vista Previa)
+          </CardTitle>
+          <CardDescription>
+            SVGs técnicos optimizados para CNC/Plotter - Vista frontal para máxima precisión
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {components.map((component) => (
+              <SVGPreview
+                key={component.id}
+                component={component}
+                svgContent={svgFiles[component.id]}
+                showDownload={true}
+              />
+            ))}
+          </div>
+        </CardContent>
       </Card>
 
       {/* Components Section */}

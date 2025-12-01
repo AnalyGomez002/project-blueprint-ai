@@ -1,12 +1,14 @@
 // SVG Generator for CNC/Plotter cutting files
-// Generates clean technical drawings with proportional scaling
+// Generates professional technical drawings with front view optimization
+// Always uses FRONT VIEW (largo x alto) for optimal irregular shape capture
 
 import { Component } from './types';
 
-// Fixed SVG canvas dimensions
+// Fixed SVG canvas dimensions for cutting files
 const SVG_WIDTH = 800;
-const SVG_HEIGHT = 500;
-const PADDING = 50; // Padding from edges
+const SVG_HEIGHT = 600;
+const PADDING = 60; // Padding from edges for technical info
+const INFO_MARGIN = 40; // Space for technical information
 
 // Helper to create dimension lines with arrows and measurements
 function createDimensionLine(
@@ -73,11 +75,65 @@ function formatMeasurement(mm: number): string {
   return `${cm.toFixed(1).replace(/\.0$/, '')} cm`;
 }
 
+// Helper to create registration marks (corner alignment marks)
+function createRegistrationMark(x: number, y: number, size: number = 10): string {
+  return `
+    <g class="registration-mark">
+      <circle cx="${x}" cy="${y}" r="${size / 2}" fill="none" stroke="#000000" stroke-width="0.5"/>
+      <line x1="${x - size}" y1="${y}" x2="${x + size}" y2="${y}" stroke="#000000" stroke-width="0.5"/>
+      <line x1="${x}" y1="${y - size}" x2="${x}" y2="${y + size}" stroke="#000000" stroke-width="0.5"/>
+    </g>`;
+}
+
+// Helper to create graphic scale bar
+function createScaleBar(x: number, y: number, realMm: number, scale: number): string {
+  const barLength = 100; // pixels
+  const realLength = barLength / scale;
+  const segments = 5;
+  const segmentLength = barLength / segments;
+
+  let scaleElements = `<g class="scale-bar">`;
+
+  // Scale bar segments
+  for (let i = 0; i < segments; i++) {
+    const fill = i % 2 === 0 ? '#000000' : '#ffffff';
+    scaleElements += `<rect x="${x + i * segmentLength}" y="${y}" width="${segmentLength}" height="8" fill="${fill}" stroke="#000000" stroke-width="0.5"/>`;
+  }
+
+  // Scale text
+  scaleElements += `<text x="${x + barLength / 2}" y="${y + 20}" font-family="Arial" font-size="10" fill="#000000" text-anchor="middle">Escala: ${formatMeasurement(realLength)}</text>`;
+  scaleElements += `</g>`;
+
+  return scaleElements;
+}
+
+// Helper to create technical info box
+function createTechnicalInfo(component: Component, x: number, y: number): string {
+  const lineHeight = 14;
+  let currentY = y;
+
+  return `
+    <g class="technical-info">
+      <text x="${x}" y="${currentY}" font-family="Arial" font-size="12" font-weight="bold" fill="#000000">INFORMACIÓN TÉCNICA</text>
+      ${currentY += lineHeight, ''}
+      <text x="${x}" y="${currentY}" font-family="Arial" font-size="10" fill="#000000">Componente: ${component.nombre}</text>
+      ${currentY += lineHeight, ''}
+      <text x="${x}" y="${currentY}" font-family="Arial" font-size="10" fill="#000000">Material: ${component.material.tipo}</text>
+      ${currentY += lineHeight, ''}
+      <text x="${x}" y="${currentY}" font-family="Arial" font-size="10" fill="#000000">Grosor: ${component.dimensiones.ancho} ${component.dimensiones.unidad}</text>
+      ${currentY += lineHeight, ''}
+      <text x="${x}" y="${currentY}" font-family="Arial" font-size="10" fill="#000000">Cantidad: ${component.material.cantidad} ${component.material.unidadCantidad}</text>
+      ${currentY += lineHeight, ''}
+      <text x="${x}" y="${currentY}" font-family="Arial" font-size="10" fill="#000000">Vista: FRONTAL (${formatMeasurement((component.dimensiones.largo || 100) * 10)} × ${formatMeasurement((component.dimensiones.alto || 100) * 10)})</text>
+    </g>`;
+}
+
 export function generateSVG(component: Component): string {
-  // Get real component dimensions in mm
-  // We strictly use 'largo' (length) and 'alto' (height) for the 2D profile as requested
+  // FRONT VIEW OPTIMIZATION: Always use largo (width) x alto (height)
+  // This ensures irregular shapes are captured from the most informative perspective
   const realWidthMm = (component.dimensiones.largo || 100) * 10;
   const realHeightMm = (component.dimensiones.alto || 100) * 10;
+  const realDepthMm = (component.dimensiones.ancho || 10) * 10; // Depth/thickness
 
   // Calculate scaling to fit within SVG canvas (leaving padding)
   // We want to simulate the piece being cut from a larger sheet, so we align it to top-left
@@ -103,21 +159,27 @@ export function generateSVG(component: Component): string {
   // Dimension offsets (scaled visually)
   const dimOffset = 30;
 
-  // Pattern definitions
+  // Pattern definitions for professional cutting files
   const patterns = `
   <defs>
-    <!-- Pattern for useful material (diagonal black/white) -->
-    <pattern id="usefulMaterial" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-      <rect x="0" y="0" width="20" height="20" fill="#ffffff"/>
-      <line x1="0" y1="0" x2="20" y2="20" stroke="#000000" stroke-width="1"/>
-      <line x1="0" y1="20" x2="20" y2="0" stroke="#000000" stroke-width="1"/>
+    <!-- Pattern for useful material (light wood grain effect) -->
+    <pattern id="usefulMaterial" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="30" height="30" fill="#fef9f3"/>
+      <line x1="0" y1="5" x2="30" y2="5" stroke="#e8dcc8" stroke-width="0.5"/>
+      <line x1="0" y1="15" x2="30" y2="15" stroke="#e8dcc8" stroke-width="0.5"/>
+      <line x1="0" y1="25" x2="30" y2="25" stroke="#e8dcc8" stroke-width="0.5"/>
     </pattern>
 
-    <!-- Pattern for waste material (dotted gray) -->
+    <!-- Pattern for waste material (grid) -->
     <pattern id="wasteMaterial" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-      <rect x="0" y="0" width="20" height="20" fill="#f5f5f5"/>
-      <circle cx="10" cy="10" r="1.5" fill="#999999"/>
+      <rect x="0" y="0" width="20" height="20" fill="#f8f8f8"/>
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e0e0e0" stroke-width="0.5"/>
     </pattern>
+    
+    <!-- Marker for fold lines -->
+    <marker id="foldArrow" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#FF0000"/>
+    </marker>
   </defs>`;
 
   let pieceElements = '';
@@ -169,23 +231,39 @@ export function generateSVG(component: Component): string {
 
     case 'irregular':
       if (component.svgPath) {
-        // Use provided path, scaled to fit the box
-        // We wrap it in a group with transform to scale it
-        // Assuming path is defined in 0-100 coordinate space as requested from AI
+        // FRONT VIEW: Use provided path from AI, scaled to fit
+        // Path is in normalized 0-100 coordinate space (front view: largo x alto)
         pieceElements = `
-        <!-- Irregular Shape from Path -->
+        <!-- Irregular Shape - Front View (${formatMeasurement(realWidthMm)} × ${formatMeasurement(realHeightMm)}) -->
         <g transform="translate(${startX}, ${startY}) scale(${drawWidth / 100}, ${drawHeight / 100})">
-          <path d="${component.svgPath}" fill="url(#usefulMaterial)" stroke="#000000" stroke-width="3" vector-effect="non-scaling-stroke"/>
-          ${component.foldPath ? `<path d="${component.foldPath}" fill="none" stroke="#FF0000" stroke-width="2" stroke-dasharray="5,5" vector-effect="non-scaling-stroke"/>` : ''}
+          <!-- Cutting line (black, solid) -->
+          <path d="${component.svgPath}" 
+                fill="url(#usefulMaterial)" 
+                stroke="#000000" 
+                stroke-width="2" 
+                vector-effect="non-scaling-stroke"
+                stroke-linecap="round"
+                stroke-linejoin="round"/>
+          ${component.foldPath ? `
+          <!-- Fold line (red, dashed) -->
+          <path d="${component.foldPath}" 
+                fill="none" 
+                stroke="#FF0000" 
+                stroke-width="1.5" 
+                stroke-dasharray="8,4" 
+                vector-effect="non-scaling-stroke"
+                marker-mid="url(#foldArrow)"/>` : ''}
         </g>`;
       } else {
-        // Fallback to rectangle with "Irregular" text
+        // Fallback: Rectangle with warning
         pieceElements = `
-        <!-- Irregular Shape Fallback -->
+        <!-- Irregular Shape Fallback - Path Not Provided -->
         <rect x="${startX}" y="${startY}" width="${drawWidth}" height="${drawHeight}" 
-              fill="url(#usefulMaterial)" stroke="#000000" stroke-width="3" stroke-dasharray="10,5"/>
+              fill="url(#usefulMaterial)" stroke="#FF6600" stroke-width="3" stroke-dasharray="10,5"/>
         <text x="${startX + drawWidth / 2}" y="${startY + drawHeight / 2}" 
-              font-family="Arial" font-size="24" fill="#000000" text-anchor="middle" dominant-baseline="middle">FORMA IRREGULAR</text>`;
+              font-family="Arial" font-size="20" fill="#FF6600" text-anchor="middle" dominant-baseline="middle" font-weight="bold">⚠ FORMA IRREGULAR</text>
+        <text x="${startX + drawWidth / 2}" y="${startY + drawHeight / 2 + 25}" 
+              font-family="Arial" font-size="12" fill="#666666" text-anchor="middle" dominant-baseline="middle">Definir path SVG para corte preciso</text>`;
       }
       break;
 
@@ -206,6 +284,26 @@ export function generateSVG(component: Component): string {
   <!-- Vertical dimension (height) -->
   ${createDimensionLine(startX + drawWidth, startY, startX + drawWidth, startY + drawHeight, formatMeasurement(realHeightMm), dimOffset, true)}`;
 
+  // Registration marks at corners
+  const registrationMarks = `
+  <!-- Registration Marks for Alignment -->
+  ${createRegistrationMark(20, 20)}
+  ${createRegistrationMark(SVG_WIDTH - 20, 20)}
+  ${createRegistrationMark(20, SVG_HEIGHT - 20)}
+  ${createRegistrationMark(SVG_WIDTH - 20, SVG_HEIGHT - 20)}`;
+
+  // Scale bar
+  const scaleBar = createScaleBar(startX, SVG_HEIGHT - 35, realWidthMm, scale);
+
+  // Technical information
+  const technicalInfo = createTechnicalInfo(component, 20, SVG_HEIGHT - 120);
+
+  // Component ID and metadata
+  const metadata = `
+  <!-- Metadata -->
+  <text x="${SVG_WIDTH - 20}" y="15" font-family="Arial" font-size="10" fill="#666666" text-anchor="end">ID: ${component.id}</text>
+  <text x="${SVG_WIDTH / 2}" y="15" font-family="Arial" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">ARCHIVO DE CORTE - VISTA FRONTAL</text>`;
+
   // Assemble final SVG
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${SVG_WIDTH}" height="${SVG_HEIGHT}" 
@@ -221,6 +319,13 @@ export function generateSVG(component: Component): string {
   
   ${pieceElements}
   ${dimensions}
+  ${registrationMarks}
+  ${scaleBar}
+  ${technicalInfo}
+  ${metadata}
+  
+  <!-- Border for printing/cutting area -->
+  <rect x="1" y="1" width="${SVG_WIDTH - 2}" height="${SVG_HEIGHT - 2}" fill="none" stroke="#cccccc" stroke-width="1" stroke-dasharray="5,5"/>
 </svg>`;
 
   return svg;
