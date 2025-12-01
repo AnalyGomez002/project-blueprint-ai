@@ -111,39 +111,56 @@ const Index = () => {
       // ==========================================
       console.log('[ANALYZE] Llamando a Gemini API...');
       
-      // Obtener la URL base del proyecto de Supabase
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      
-      if (!supabaseUrl) {
-        throw new Error('VITE_SUPABASE_URL no está configurada');
+      // Llamada directa a la API de Gemini
+      const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!geminiApiKey) {
+        throw new Error('VITE_GEMINI_API_KEY no está configurada');
       }
+      const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`;
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/analyze-render`, {
+      const response = await fetch(GEMINI_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          base64Image: base64Image,
-          mimeType: mimeType,
-          prompt: geminiPrompt
-        })
+          contents: [
+            {
+              parts: [
+                {
+                  inlineData: {
+                    data: base64Image,
+                    mimeType: mimeType,
+                  },
+                },
+                {
+                  text: geminiPrompt,
+                },
+              ],
+            },
+          ],
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
         console.error('[ANALYZE] Error response:', errorData);
-        throw new Error(errorData.error || 'Error al llamar a la API de Gemini');
+        throw new Error(errorData.error?.message || 'Error al llamar a la API de Gemini');
       }
 
       const geminiResponse = await response.json();
-      console.log('[ANALYZE] Respuesta recibida:', geminiResponse);
+      // Extraer el texto de la respuesta
+      const responseText = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      // Extraer JSON del response
+      const jsonMatch = responseText.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+      console.log('[GEMINI] Parsed successfully:', Array.isArray(parsed) ? parsed.length : 'object');
       
-      if (!geminiResponse.success || !geminiResponse.components) {
+      if (!parsed || parsed.length === 0) {
         throw new Error('No se recibieron componentes de la IA');
       }
 
-      const componentsFromAI = geminiResponse.components;
+      const componentsFromAI = parsed;
 
       // ==========================================
       // PASO 4: PROCESAR Y CALCULAR COMPONENTES
