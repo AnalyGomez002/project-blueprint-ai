@@ -42,59 +42,266 @@ const Index = () => {
     setProjectData(data);
     setIsGenerating(true);
     
-    // TODO: Implementar llamada a la IA
-    // Por ahora, datos de ejemplo
-    setTimeout(() => {
-      setManualData({
-        components: [
-          {
-            id: "1",
-            name: "Panel Frontal",
-            dimensions: "200 x 250 x 1.8 cm",
-            material: "MDF 18mm",
-            quantity: "1.25 m²",
-            notes: "Corte recto, acabado con vinilo blanco mate"
-          },
-          {
-            id: "2",
-            name: "Estructura Base",
-            dimensions: "200 x 100 cm",
-            material: "PTR 1\" x 1\"",
-            quantity: "6 metros lineales",
-            notes: "Soldadura en esquinas, pintura anticorrosiva negra"
-          }
-        ],
-        consumables: [
-          {
-            id: "1",
-            name: "Tira LED",
-            quantity: "8",
-            unit: "metros"
-          },
-          {
-            id: "2",
-            name: "Vinilo de corte",
-            quantity: "2.5",
-            unit: "m²"
-          },
-          {
-            id: "3",
-            name: "Tornillos",
-            quantity: "50",
-            unit: "piezas"
-          }
-        ],
-        assemblySteps: [
-          "Cortar paneles de MDF según especificaciones",
-          "Construir estructura base con PTR",
-          "Soldar y reforzar esquinas",
-          "Montar paneles sobre estructura",
-          "Instalar sistema de iluminación LED",
-          "Aplicar vinilo y acabados finales"
-        ]
+    try {
+      // ==========================================
+      // PASO 1: CONVERTIR IMAGEN A BASE64
+      // ==========================================
+      // Detectar el MIME type del archivo
+      const fileExtension = data.renderFile!.name.split('.').pop()?.toLowerCase();
+      let mimeType = "image/png";
+      
+      if (fileExtension === "jpg" || fileExtension === "jpeg") {
+        mimeType = "image/jpeg";
+      } else if (fileExtension === "png") {
+        mimeType = "image/png";
+      } else if (fileExtension === "webp") {
+        mimeType = "image/webp";
+      } else if (fileExtension === "pdf") {
+        mimeType = "application/pdf";
+      }
+
+      // Convertir el archivo a base64
+      const base64Image = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = reader.result as string;
+          // Remover el prefijo "data:image/xxx;base64," para obtener solo el base64
+          const base64Data = base64.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(data.renderFile!);
       });
+
+      console.log('[ANALYZE] Archivo convertido a base64, MIME:', mimeType);
+
+      // ==========================================
+      // PASO 2: PREPARAR PROMPT PARA GEMINI
+      // ==========================================
+      const dimsText = `Frente: ${data.dimensions.frente} cm, Fondo: ${data.dimensions.fondo} cm, Altura: ${data.dimensions.altura} cm`;
+      
+      const geminiPrompt = `
+        Analiza este render arquitectónico/de mueble y devuelve un JSON con componentes fabricables.
+        
+        IMPORTANTE - Para cada componente, devuelve EXACTAMENTE esta estructura:
+        {
+          "name": "nombre descriptivo",
+          "type": "rect|panel|led|light|cylinder|box|text|logo",
+          "bbox_pct": {"x": 0-100, "y": 0-100, "w": 0-100, "h": 0-100},
+          "approx_pct_width": 0-100,
+          "approx_pct_height": 0-100,
+          "depth_cm": número,
+          "color": "color del componente",
+          "suggested_material": "MDF|Madera|Aluminio|Vidrio|LED|Vinilo",
+          "quantity": número,
+          "brand": "marca si aplica",
+          "notes": "detalles de fabricación"
+        }
+        
+        Dimensiones reales: ${dimsText}
+        Especificaciones adicionales: ${data.specifications}
+        
+        SOLO devuelve JSON en formato array, sin texto adicional.
+      `;
+
+      // ==========================================
+      // PASO 3: LLAMAR A LA API DE GEMINI
+      // ==========================================
+      // AQUÍ IRÍA LA LLAMADA A TU API DE GEMINI
+      // const response = await fetch('TU_ENDPOINT_DE_GEMINI', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //     'Authorization': `Bearer TU_API_KEY`
+      //   },
+      //   body: JSON.stringify({
+      //     image: base64Image,
+      //     mimeType: mimeType,
+      //     prompt: geminiPrompt
+      //   })
+      // });
+      // 
+      // const geminiResponse = await response.json();
+      // const componentsFromAI = geminiResponse.components || [];
+
+      // ==========================================
+      // SIMULACIÓN DE RESPUESTA (REMOVER CUANDO TENGAS LA API)
+      // ==========================================
+      console.log('[ANALYZE] Llamando a Gemini API...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Esta es una respuesta simulada basada en tu estructura
+      const componentsFromAI = [
+        {
+          name: "Panel Frontal Principal",
+          type: "panel",
+          approx_pct_width: 80,
+          approx_pct_height: 90,
+          depth_cm: 1.8,
+          color: "blanco",
+          suggested_material: "MDF",
+          quantity: 1,
+          brand: "",
+          notes: "Acabado con vinilo mate"
+        },
+        {
+          name: "Logo Central",
+          type: "logo",
+          approx_pct_width: 30,
+          approx_pct_height: 15,
+          depth_cm: 0.3,
+          color: "dorado",
+          suggested_material: "Vinilo",
+          quantity: 1,
+          brand: "",
+          notes: "Vinilo de corte premium"
+        },
+        {
+          name: "Estructura Base",
+          type: "box",
+          approx_pct_width: 100,
+          approx_pct_height: 20,
+          depth_cm: 100,
+          color: "negro",
+          suggested_material: "PTR",
+          quantity: 1,
+          brand: "",
+          notes: "Soldadura en esquinas"
+        },
+        {
+          name: "Iluminación Superior",
+          type: "led",
+          approx_pct_width: 70,
+          approx_pct_height: 5,
+          depth_cm: 2,
+          color: "blanco cálido",
+          suggested_material: "LED",
+          quantity: 1,
+          brand: "Philips",
+          notes: "Tira LED adhesiva"
+        }
+      ];
+
+      // ==========================================
+      // PASO 4: PROCESAR Y CALCULAR COMPONENTES
+      // ==========================================
+      const processedComponents: ManualData['components'] = [];
+      const consumablesMap = new Map<string, { quantity: number; unit: string }>();
+
+      componentsFromAI.forEach((comp, index) => {
+        // Calcular dimensiones reales basadas en porcentajes
+        const width_cm = (comp.approx_pct_width / 100) * data.dimensions.frente;
+        const height_cm = (comp.approx_pct_height / 100) * data.dimensions.altura;
+        const depth_cm = comp.depth_cm || data.dimensions.fondo * 0.1;
+
+        // Calcular área en m²
+        const area_m2 = (width_cm / 100) * (height_cm / 100);
+
+        // Calcular consumibles según el tipo de componente
+        // LED: perímetro del componente si es tipo LED o light
+        if (comp.type?.toLowerCase().includes('led') || comp.type?.toLowerCase().includes('light')) {
+          const led_meters = ((width_cm + height_cm) * 2) / 100;
+          const currentLED = consumablesMap.get('Tira LED') || { quantity: 0, unit: 'metros' };
+          consumablesMap.set('Tira LED', {
+            quantity: currentLED.quantity + led_meters,
+            unit: 'metros'
+          });
+        }
+
+        // Pintura: basada en el área
+        if (area_m2 > 0.1) { // Solo para componentes significativos
+          const paint_liters = area_m2 / 8; // ~8m² por litro
+          const currentPaint = consumablesMap.get('Pintura') || { quantity: 0, unit: 'litros' };
+          consumablesMap.set('Pintura', {
+            quantity: currentPaint.quantity + paint_liters,
+            unit: 'litros'
+          });
+        }
+
+        // Tornillos: basados en el perímetro
+        const screws = Math.ceil((width_cm * 2 + height_cm * 2) / 25); // ~1 tornillo cada 25cm
+        const currentScrews = consumablesMap.get('Tornillos') || { quantity: 0, unit: 'piezas' };
+        consumablesMap.set('Tornillos', {
+          quantity: currentScrews.quantity + screws,
+          unit: 'piezas'
+        });
+
+        // Vinilo: para componentes de tipo logo o text
+        if (comp.type?.toLowerCase().includes('logo') || comp.type?.toLowerCase().includes('text')) {
+          const currentVinyl = consumablesMap.get('Vinilo de corte') || { quantity: 0, unit: 'm²' };
+          consumablesMap.set('Vinilo de corte', {
+            quantity: currentVinyl.quantity + area_m2,
+            unit: 'm²'
+          });
+        }
+
+        // Determinar la cantidad según el material
+        let quantityDisplay = "";
+        if (comp.suggested_material === "MDF" || comp.suggested_material === "Madera") {
+          quantityDisplay = `${area_m2.toFixed(2)} m²`;
+        } else if (comp.suggested_material === "PTR" || comp.suggested_material === "Aluminio") {
+          const linear_meters = ((width_cm + height_cm) * 2) / 100;
+          quantityDisplay = `${linear_meters.toFixed(2)} metros lineales`;
+        } else if (comp.suggested_material === "LED") {
+          const led_meters = ((width_cm + height_cm) * 2) / 100;
+          quantityDisplay = `${led_meters.toFixed(2)} metros`;
+        } else if (comp.suggested_material === "Vinilo") {
+          quantityDisplay = `${area_m2.toFixed(2)} m²`;
+        } else {
+          quantityDisplay = `${comp.quantity || 1} unidad(es)`;
+        }
+
+        processedComponents.push({
+          id: String(index + 1),
+          name: comp.name,
+          dimensions: `${width_cm.toFixed(1)} x ${height_cm.toFixed(1)} x ${depth_cm.toFixed(1)} cm`,
+          material: `${comp.suggested_material}${comp.depth_cm ? ` ${comp.depth_cm}mm` : ''}`,
+          quantity: quantityDisplay,
+          notes: `${comp.notes}${comp.color ? ` - Color: ${comp.color}` : ''}${comp.brand ? ` - Marca: ${comp.brand}` : ''}`
+        });
+      });
+
+      // ==========================================
+      // PASO 5: PREPARAR CONSUMIBLES
+      // ==========================================
+      const consumables: ManualData['consumables'] = Array.from(consumablesMap.entries()).map(
+        ([name, data], index) => ({
+          id: String(index + 1),
+          name,
+          quantity: data.quantity.toFixed(2),
+          unit: data.unit
+        })
+      );
+
+      // ==========================================
+      // PASO 6: GENERAR PASOS DE ENSAMBLAJE
+      // ==========================================
+      const assemblySteps = [
+        "Preparar y cortar todos los materiales según especificaciones",
+        "Construir la estructura base y reforzar uniones",
+        "Ensamblar paneles principales sobre la estructura",
+        "Instalar sistemas de iluminación y cableado",
+        "Aplicar acabados finales (pintura, vinilo, etc.)",
+        "Realizar pruebas de funcionalidad y ajustes finales"
+      ];
+
+      // ==========================================
+      // PASO 7: ESTABLECER RESULTADO FINAL
+      // ==========================================
+      setManualData({
+        components: processedComponents,
+        consumables,
+        assemblySteps
+      });
+
+      console.log('[ANALYZE] Manual generado exitosamente');
+      
+    } catch (error) {
+      console.error('[ANALYZE ERROR]', error);
+      setManualData(null);
+    } finally {
       setIsGenerating(false);
-    }, 2000);
+    }
   };
 
   return (
