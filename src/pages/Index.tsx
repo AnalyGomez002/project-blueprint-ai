@@ -6,6 +6,11 @@ import { MaterialsDatabase } from "@/components/MaterialsDatabase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { AnalyzingSummary } from "@/components/AnalyzingSummary";
+import { useSavedProjects, SavedProject } from "@/hooks/useSavedProjects";
+import { SavedProjectsList } from "@/components/SavedProjectsList";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { FolderOpen } from "lucide-react";
 
 export interface ProjectData {
   renderFiles: File[];
@@ -40,6 +45,28 @@ const Index = () => {
   const [projectData, setProjectData] = useState<ProjectData | null>(null);
   const [manualData, setManualData] = useState<ManualData | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const { saveProject } = useSavedProjects();
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  const handleSaveProject = () => {
+    if (projectData && manualData) {
+      saveProject(projectData, manualData);
+      toast({
+        title: "Proyecto Guardado",
+        description: "El proyecto se ha guardado exitosamente en tus favoritos.",
+      });
+    }
+  };
+
+  const handleLoadProject = (project: SavedProject) => {
+    setProjectData(project.projectData);
+    setManualData(project.manualData);
+    setIsSheetOpen(false);
+    toast({
+      title: "Proyecto Cargado",
+      description: `Se ha cargado el proyecto "${project.name}".`,
+    });
+  };
 
   const handleGenerateManual = async (data: ProjectData) => {
     setProjectData(data);
@@ -307,10 +334,27 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="generator" className="w-full">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-8">
-            <TabsTrigger value="generator">Generador</TabsTrigger>
-            <TabsTrigger value="materials">Base de Materiales</TabsTrigger>
-          </TabsList>
+          <div className="flex justify-between items-center mb-8 max-w-4xl mx-auto">
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="generator">Generador</TabsTrigger>
+              <TabsTrigger value="materials">Base de Materiales</TabsTrigger>
+            </TabsList>
+
+            <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <FolderOpen className="w-4 h-4" />
+                  Mis Proyectos
+                </Button>
+              </SheetTrigger>
+              <SheetContent>
+                <SheetHeader className="mb-4">
+                  <SheetTitle>Proyectos Guardados</SheetTitle>
+                </SheetHeader>
+                <SavedProjectsList onLoadProject={handleLoadProject} />
+              </SheetContent>
+            </Sheet>
+          </div>
 
           <TabsContent value="generator" className="space-y-8">
             <div className="max-w-4xl mx-auto">
@@ -333,6 +377,7 @@ const Index = () => {
                 <ManualDisplay
                   data={manualData}
                   projectData={projectData}
+                  onSave={handleSaveProject}
                 />
               </div>
             )}
