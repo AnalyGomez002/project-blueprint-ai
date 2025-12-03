@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ManualDisplay } from "@/components/ManualDisplay";
@@ -11,6 +11,8 @@ import { SavedProjectsList } from "@/components/SavedProjectsList";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { FolderOpen } from "lucide-react";
+import { materialsAPI } from "@/lib/api/materials";
+import { Material } from "@/lib/supabase";
 
 export interface ProjectData {
   renderFiles: File[];
@@ -23,6 +25,7 @@ export interface ProjectData {
 }
 
 export interface ManualData {
+  projectName?: string;
   components: Array<{
     id: string;
     name: string;
@@ -45,16 +48,39 @@ const Index = () => {
   const [projectData, setProjectData] = useState<ProjectData | null>(null);
   const [manualData, setManualData] = useState<ManualData | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const { saveProject } = useSavedProjects();
+  const { saveProject, deleteProject } = useSavedProjects();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [availableMaterials, setAvailableMaterials] = useState<Material[]>([]);
 
-  const handleSaveProject = () => {
+  // Cargar materiales al montar el componente
+  useEffect(() => {
+    loadMaterials();
+  }, []);
+
+  const loadMaterials = async () => {
+    try {
+      const materials = await materialsAPI.getAll();
+      setAvailableMaterials(materials);
+    } catch (error) {
+      console.error('Error loading materials:', error);
+    }
+  };
+
+  const handleSaveProject = async () => {
     if (projectData && manualData) {
-      saveProject(projectData, manualData);
-      toast({
-        title: "Proyecto Guardado",
-        description: "El proyecto se ha guardado exitosamente en tus favoritos.",
-      });
+      const result = await saveProject(projectData, manualData);
+      if (result) {
+        toast({
+          title: "Proyecto Guardado",
+          description: "El proyecto se ha guardado exitosamente en Supabase.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "No se pudo guardar el proyecto",
+          variant: "destructive"
+        });
+      }
     }
   };
 
@@ -68,6 +94,12 @@ const Index = () => {
     });
   };
 
+  const handleReset = () => {
+    setProjectData(null);
+    setManualData(null);
+    setIsGenerating(false);
+  };
+
   const handleGenerateManual = async (data: ProjectData) => {
     setProjectData(data);
     setIsGenerating(true);
@@ -75,9 +107,6 @@ const Index = () => {
     try {
       // ==========================================
       // PASO 1: CONVERTIR IMAGEN A BASE64
-      // ==========================================
-      // ==========================================
-      // PASO 1: CONVERTIR IMÁGENES A BASE64
       // ==========================================
 
       const imageParts = await Promise.all(data.renderFiles.map(async (file) => {
@@ -118,35 +147,45 @@ const Index = () => {
 
       console.log(`[ANALYZE] ${imageParts.length} archivos convertidos a base64`);
 
-      console.log(`[ANALYZE] ${imageParts.length} archivos convertidos a base64`);
-
       // ==========================================
       // PASO 2: PREPARAR PROMPT PARA GEMINI
       // ==========================================
       const dimsText = `Frente: ${data.dimensions.frente} cm, Fondo: ${data.dimensions.fondo} cm, Altura: ${data.dimensions.altura} cm`;
 
+      // Preparar lista de materiales disponibles para la IA
+      const materialsText = availableMaterials.length > 0
+        ? `\n\nMateriales disponibles en inventario:\n${availableMaterials.map(m => `- ${m.name} (${m.category}, ${m.unit})`).join('\n')}`
+        : '';
+
       const geminiPrompt = `
         Analiza este render arquitectónico/de mueble y devuelve un JSON con componentes fabricables.
         
-        IMPORTANTE - Para cada componente, devuelve EXACTAMENTE esta estructura:
+        IMPORTANTE - Devuelve EXACTAMENTE esta estructura JSON:
         {
-          "name": "nombre descriptivo",
-          "type": "rect|panel|led|light|cylinder|box|text|logo",
-          "bbox_pct": {"x": 0-100, "y": 0-100, "w": 0-100, "h": 0-100},
-          "approx_pct_width": 0-100,
-          "approx_pct_height": 0-100,
-          "depth_cm": número,
-          "color": "color del componente",
-          "suggested_material": "MDF|Madera|Aluminio|Vidrio|LED|Vinilo",
-          "quantity": número,
-          "brand": "marca si aplica",
-          "notes": "detalles de fabricación"
+          "project_name": "Nombre creativo y descriptivo del proyecto basado en el diseño",
+          "components": [
+            {
+              "name": "nombre descriptivo",
+              "type": "rect|panel|led|light|cylinder|box|text|logo",
+              "bbox_pct": {"x": 0-100, "y": 0-100, "w": 0-100, "h": 0-100},
+              "approx_pct_width": 0-100,
+              "approx_pct_height": 0-100,
+              "depth_cm": número,
+              "color": "color del componente",
+              "suggested_material": "Usa preferiblemente los materiales disponibles en inventario",
+              "quantity": número,
+              "brand": "marca si aplica",
+              "notes": "detalles de fabricación"
+            }
+          ]
         }
         
         Dimensiones reales: ${dimsText}
-        Especificaciones adicionales: ${data.specifications}
+        Especificaciones adicionales: ${data.specifications}${materialsText}
         
-        SOLO devuelve JSON en formato array, sin texto adicional.
+        IMPORTANTE: Prioriza el uso de los materiales disponibles en inventario para las sugerencias.
+        
+        SOLO devuelve el objeto JSON, sin texto adicional ni markdown.
       `;
 
       // ==========================================
@@ -190,15 +229,16 @@ const Index = () => {
       // Extraer el texto de la respuesta
       const responseText = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || '';
       // Extraer JSON del response
-      const jsonMatch = responseText.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
-      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
-      console.log('[GEMINI] Parsed successfully:', Array.isArray(parsed) ? parsed.length : 'object');
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+      console.log('[GEMINI] Parsed successfully:', parsed ? 'yes' : 'no');
 
-      if (!parsed || parsed.length === 0) {
+      if (!parsed || !parsed.components || parsed.components.length === 0) {
         throw new Error('No se recibieron componentes de la IA');
       }
 
-      const componentsFromAI = parsed;
+      const componentsFromAI = parsed.components;
+      const generatedProjectName = parsed.project_name || "Proyecto Generado";
 
       // ==========================================
       // PASO 4: PROCESAR Y CALCULAR COMPONENTES
@@ -206,7 +246,7 @@ const Index = () => {
       const processedComponents: ManualData['components'] = [];
       const consumablesMap = new Map<string, { quantity: number; unit: string }>();
 
-      componentsFromAI.forEach((comp, index) => {
+      componentsFromAI.forEach((comp: any, index: number) => {
         // Calcular dimensiones reales basadas en porcentajes
         const width_cm = (comp.approx_pct_width / 100) * data.dimensions.frente;
         const height_cm = (comp.approx_pct_height / 100) * data.dimensions.altura;
@@ -304,13 +344,35 @@ const Index = () => {
       ];
 
       // ==========================================
-      // PASO 7: ESTABLECER RESULTADO FINAL
+      // PASO 7: ESTABLECER RESULTADO FINAL Y GUARDAR
       // ==========================================
-      setManualData({
+      const finalManualData = {
+        projectName: generatedProjectName,
         components: processedComponents,
         consumables,
         assemblySteps
-      });
+      };
+
+      setManualData(finalManualData);
+
+      // Guardar automáticamente en Supabase
+      try {
+        const savedProject = await saveProject(data, finalManualData);
+        if (savedProject) {
+          console.log('[ANALYZE] Proyecto guardado en Supabase:', savedProject.id);
+          toast({
+            title: "Proyecto guardado automáticamente",
+            description: "Tu manual ha sido guardado en la nube exitosamente.",
+          });
+        }
+      } catch (saveError) {
+        console.error('[ANALYZE] Error guardando en Supabase:', saveError);
+        toast({
+          title: "Error al guardar",
+          description: saveError instanceof Error ? saveError.message : "No se pudo guardar el proyecto automáticamente.",
+          variant: "destructive"
+        });
+      }
 
       console.log('[ANALYZE] Manual generado exitosamente');
 
@@ -357,12 +419,15 @@ const Index = () => {
           </div>
 
           <TabsContent value="generator" className="space-y-8">
-            <div className="max-w-4xl mx-auto">
-              <ProjectForm
-                onSubmit={handleGenerateManual}
-                isGenerating={isGenerating}
-              />
-            </div>
+            {/* Show form only if NOT generating AND NO manual data */}
+            {!isGenerating && !manualData && (
+              <div className="max-w-4xl mx-auto animate-fade-in">
+                <ProjectForm
+                  onSubmit={handleGenerateManual}
+                  isGenerating={isGenerating}
+                />
+              </div>
+            )}
 
             {/* Show summary while analyzing */}
             {isGenerating && !manualData && projectData && (
@@ -378,6 +443,7 @@ const Index = () => {
                   data={manualData}
                   projectData={projectData}
                   onSave={handleSaveProject}
+                  onReset={handleReset}
                 />
               </div>
             )}

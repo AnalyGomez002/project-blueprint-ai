@@ -14,9 +14,10 @@ interface ManualDisplayProps {
   data: ManualData;
   projectData: ProjectData | null;
   onSave: () => void;
+  onReset: () => void;
 }
 
-export const ManualDisplay = ({ data, projectData, onSave }: ManualDisplayProps) => {
+export const ManualDisplay = ({ data, projectData, onSave, onReset }: ManualDisplayProps) => {
   const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
   const [isDownloadingDOCX, setIsDownloadingDOCX] = useState(false);
   const manualRef = useRef<HTMLDivElement>(null);
@@ -66,7 +67,7 @@ export const ManualDisplay = ({ data, projectData, onSave }: ManualDisplayProps)
       // Adaptar ManualData y ProjectData a ProductionManual
       const productionManual = {
         proyecto: {
-          nombre: (projectData.specifications || "Proyecto sin nombre"),
+          nombre: (data.projectName || projectData.specifications || "Proyecto sin nombre"),
           descripcion: projectData.specifications || "Sin descripción",
           dimensionesGenerales: {
             frente: projectData.dimensions.frente,
@@ -104,7 +105,7 @@ export const ManualDisplay = ({ data, projectData, onSave }: ManualDisplayProps)
         })),
       };
 
-      const projectName = (projectData.specifications || "proyecto")
+      const projectName = (data.projectName || projectData.specifications || "proyecto")
         .toLowerCase()
         .slice(0, 20)
         .replace(/[^a-z0-9]+/g, '-')
@@ -125,7 +126,7 @@ export const ManualDisplay = ({ data, projectData, onSave }: ManualDisplayProps)
     try {
       const productionManual = {
         proyecto: {
-          nombre: (projectData.specifications || "Proyecto sin nombre"),
+          nombre: (data.projectName || projectData.specifications || "Proyecto sin nombre"),
           descripcion: projectData.specifications || "Sin descripción",
           dimensionesGenerales: {
             frente: projectData.dimensions.frente,
@@ -163,7 +164,7 @@ export const ManualDisplay = ({ data, projectData, onSave }: ManualDisplayProps)
         })),
       };
 
-      const projectName = (projectData.specifications || "proyecto")
+      const projectName = (data.projectName || projectData.specifications || "proyecto")
         .toLowerCase()
         .slice(0, 20)
         .replace(/[^a-z0-9]+/g, '-')
@@ -179,7 +180,7 @@ export const ManualDisplay = ({ data, projectData, onSave }: ManualDisplayProps)
 
   const handleDownloadAllSVGs = async () => {
     if (!projectData) return;
-    const projectName = projectData.specifications || "proyecto";
+    const projectName = data.projectName || projectData.specifications || "proyecto";
     await downloadAllSVGsAsZip(svgFiles, components, projectName);
   };
 
@@ -204,7 +205,7 @@ export const ManualDisplay = ({ data, projectData, onSave }: ManualDisplayProps)
               Manual de Producción Generado
             </Badge>
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
-              {projectData?.specifications.slice(0, 40) || "Proyecto Sin Nombre"}...
+              {data.projectName || projectData?.specifications.slice(0, 40) || "Proyecto Sin Nombre"}
             </h1>
             <div className="flex items-center gap-4 text-primary-foreground/80 text-sm">
               <span className="flex items-center gap-1">
@@ -219,6 +220,9 @@ export const ManualDisplay = ({ data, projectData, onSave }: ManualDisplayProps)
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Button onClick={onReset} variant="outline" className="bg-white/10 text-white border-white/20 hover:bg-white/20">
+              Generar otro manual
+            </Button>
             <Button onClick={onSave} variant="secondary" className="shadow-sm">
               <Save className="w-4 h-4 mr-2" />
               Guardar

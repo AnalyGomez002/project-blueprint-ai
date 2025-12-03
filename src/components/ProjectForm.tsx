@@ -67,14 +67,7 @@ export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
       return;
     }
 
-    if (!specifications.trim()) {
-      toast({
-        title: "Especificaciones vacías",
-        description: "Cuéntanos un poco sobre los materiales y acabados que deseas.",
-        variant: "destructive"
-      });
-      return;
-    }
+    // Specifications are now optional as AI generates the project name
 
     onSubmit({
       renderFiles,
@@ -250,7 +243,7 @@ export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground font-bold text-sm">3</div>
               <div>
-                <CardTitle className="text-lg">Especificaciones Técnicas</CardTitle>
+                <CardTitle className="text-lg">Especificaciones Técnicas <span className="text-sm font-normal text-muted-foreground ml-2">(Opcional)</span></CardTitle>
                 <CardDescription>Detalles sobre materiales, acabados y estructura</CardDescription>
               </div>
             </div>
@@ -260,7 +253,7 @@ export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
               <Sparkles className="h-4 w-4 text-primary" />
               <AlertTitle className="text-primary font-medium">Tips para mejores resultados</AlertTitle>
               <AlertDescription className="text-muted-foreground text-sm mt-1">
-                Menciona el tipo de material (MDF, Melamina, Pino), el grosor preferido (15mm, 18mm), colores de acabado y si lleva iluminación LED.
+                Si lo dejas vacío, la IA decidirá los mejores materiales. Puedes especificar detalles si lo prefieres.
               </AlertDescription>
             </Alert>
 
@@ -268,7 +261,7 @@ export const ProjectForm = ({ onSubmit, isGenerating }: ProjectFormProps) => {
               <Label htmlFor="specifications" className="sr-only">Especificaciones</Label>
               <Textarea
                 id="specifications"
-                placeholder="Ejemplo: Quiero fabricar este mueble en MDF de 18mm. La estructura principal debe ser negra mate y las puertas en acabado madera natural. Incluir iluminación LED en los estantes superiores..."
+                placeholder="Ejemplo: Quiero fabricar este mueble en MDF de 18mm... (Opcional)"
                 value={specifications}
                 onChange={(e) => setSpecifications(e.target.value)}
                 rows={5}

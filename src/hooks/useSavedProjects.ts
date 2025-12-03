@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ProjectData, ManualData } from '@/pages/Index';
+import { designsAPI } from '@/lib/api/designs';
+import { Design } from '@/lib/supabase';
 
 export interface SavedProject {
     id: string;
@@ -11,42 +13,98 @@ export interface SavedProject {
 
 export const useSavedProjects = () => {
     const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const stored = localStorage.getItem('saved_projects');
-        if (stored) {
-            try {
-                setSavedProjects(JSON.parse(stored));
-            } catch (e) {
-                console.error('Error parsing saved projects', e);
-            }
-        }
+        loadProjects();
     }, []);
 
-    const saveProject = (projectData: ProjectData, manualData: ManualData) => {
-        const newProject: SavedProject = {
-            id: Date.now().toString(),
-            name: projectData.specifications.slice(0, 30) || 'Proyecto sin nombre',
-            date: new Date().toLocaleDateString(),
-            projectData,
-            manualData
-        };
+    const loadProjects = async () => {
+        try {
+            setIsLoading(true);
+            const designs = await designsAPI.getAll();
 
-        const updated = [newProject, ...savedProjects];
-        setSavedProjects(updated);
-        localStorage.setItem('saved_projects', JSON.stringify(updated));
-        return newProject;
+            // Convertir diseños de Supabase a SavedProject format
+            const projects: SavedProject[] = designs.map(design => ({
+                id: design.id,
+                name: design.name,
+                date: new Date(design.created_at).toLocaleDateString(),
+                projectData: {
+                    renderFiles: [], // No guardamos archivos originales
+                    dimensions: design.dimensions,
+                    specifications: design.specifications
+                },
+                manualData: {
+                    projectName: design.name,
+                    components: design.components.map(c => ({
+                        id: c.id,
+                        name: c.name,
+                        dimensions: c.dimensions,
+                        material: c.material,
+                        quantity: c.quantity,
+                        notes: c.notes
+                    })),
+                    consumables: []
+                }
+            }));
+
+            setSavedProjects(projects);
+        } catch (error) {
+            console.error('Error loading projects:', error);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const deleteProject = (id: string) => {
-        const updated = savedProjects.filter(p => p.id !== id);
-        setSavedProjects(updated);
-        localStorage.setItem('saved_projects', JSON.stringify(updated));
+    const saveProject = async (projectData: ProjectData, manualData: ManualData): Promise<SavedProject | null> => {
+        try {
+            const design = {
+                name: manualData.projectName || projectData.specifications.slice(0, 30) || 'Proyecto sin nombre',
+                specifications: projectData.specifications,
+                dimensions: projectData.dimensions
+            };
+
+            const components = manualData.components.map(comp => ({
+                name: comp.name,
+                dimensions: comp.dimensions,
+                material: comp.material,
+                quantity: comp.quantity,
+                notes: comp.notes
+            }));
+
+            const result = await designsAPI.create(design, components);
+
+            const newProject: SavedProject = {
+                id: result.design.id,
+                name: result.design.name,
+                date: new Date(result.design.created_at).toLocaleDateString(),
+                projectData,
+                manualData
+            };
+
+            setSavedProjects([newProject, ...savedProjects]);
+            return newProject;
+        } catch (error) {
+            console.error('Error saving project:', error);
+            throw error;
+        }
+    };
+
+    const deleteProject = async (id: string) => {
+        try {
+            await designsAPI.delete(id);
+            setSavedProjects(savedProjects.filter(p => p.id !== id));
+        } catch (error) {
+            console.error('Error deleting project:', error);
+            throw error;
+        }
     };
 
     return {
         savedProjects,
         saveProject,
-        deleteProject
+        deleteProject,
+        isLoading,
+        refreshProjects: loadProjects
     };
 };
